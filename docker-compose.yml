@@ -1,0 +1,59 @@
+networks:
+  n8n-network:
+    driver: bridge
+
+services:
+
+  # service สำหรับ PostgreSQL
+  postgres:
+    image: postgres:16
+    container_name: n8n_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      - n8n-network
+
+  # service สำหรับ n8n
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n_main
+    restart: always
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY} # ต้องตั้งค่านี้เพื่อความปลอดภัย
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - TZ=${TZ}
+      - N8N_HOST=localhost # จำเป็นเพื่อให้ Tunnel ทำงานถูกต้อง
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    networks:
+      - n8n-network
+    depends_on:
+      - postgres
+
+  # service สำหรับ ngrok
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: n8n_ngrok_tunnel
+    restart: unless-stopped
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: http n8n:5678
+    ports:
+      - "4040:4040" # สำหรับเข้าดูหน้า Web UI
+    networks:
+      - n8n-network
+    depends_on:
+      - n8n
